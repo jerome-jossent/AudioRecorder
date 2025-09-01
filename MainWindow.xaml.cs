@@ -1,13 +1,16 @@
-﻿using NAudio.Dsp;
+﻿using Microsoft.Win32;
+using NAudio.Dsp;
 using NAudio.Lame;
 using NAudio.Wave;
 using System;
 using System.Diagnostics;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-
-using System.Diagnostics;
+using System.Windows.Controls.Primitives;
+using System.Windows.Forms;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace Enregistreur_vocal
 {
@@ -25,8 +28,9 @@ namespace Enregistreur_vocal
         string recordingPath;
 
         // filtres 
-        private FiltreAudio lowPass = null;   // ~16 kHz
-        private FiltreAudio highPass = null; // ~80 Hz
+        FiltreAudio lowPass = null;   // ~16 kHz
+        FiltreAudio highPass = null; // ~80 Hz
+        FileSystemWatcher watcher;
 
         public MainWindow()
         {
@@ -144,14 +148,15 @@ namespace Enregistreur_vocal
 
             ConvertWaveToMP3();
 
+            Update_StatusBar($"Record completed – {recordingPath}");
+
             Dispatcher.Invoke(() =>
             {
                 LevelBar.Value = 0;
-                StatusText.Text = $"Audio Record completed – {recordingPath} - Click to access file";
-                StatusText.ToolTip = StatusText.Text;
             });
 
-            WindowsExplorer_OpenAndSelect.OpenAndSelect(recordingPath);
+            if (_ckb_Buzz.IsChecked == true)
+                StartBuzz();
         }
 
         void ConvertWaveToMP3()
@@ -173,16 +178,13 @@ namespace Enregistreur_vocal
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur de conversion : {ex.Message}");
+                System.Windows.MessageBox.Show($"Erreur de conversion : {ex.Message}");
             }
         }
 
-        private void BtnRefreshInput_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            PopulateDevices();
-        }
+        void BtnRefreshInput_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e){PopulateDevices();}
 
-        private void PopulateDevices()
+        void PopulateDevices()
         {
             DeviceSelector.Items.Clear();
             for (int i = 0; i < WaveIn.DeviceCount; i++)
@@ -216,17 +218,11 @@ namespace Enregistreur_vocal
             waveOut = null;
             audioReader = null;
 
-            Dispatcher.Invoke(() =>
-            {
-                StatusText.Text = "Play end.";
-
-                if (_ckb_Buzz.IsChecked == true)
-                    StartBuzz();
-            });
+            Update_StatusBar("Play end.");
         }
 
         /* ---------- Boutons ---------- */
-        private void BtnRecord_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        void BtnRecord_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             if (waveIn != null) return; // déjà en train d’enregistrer
 
@@ -237,29 +233,27 @@ namespace Enregistreur_vocal
             InitCapture();
             waveIn.StartRecording();
 
-            StatusText.Text = "Recording…";
+            Update_StatusBar("Recording…");
         }
 
-        private void BtnStopRec_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        void BtnStopRec_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             if (waveIn == null) return;
             waveIn.StopRecording();
         }
 
-        private void BtnPlay_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        void BtnPlay_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             if (!File.Exists(recordingPath)) return;
-
-
             if (waveOut != null) return; // déjà en lecture
 
             InitPlayback();
             waveOut.Play();
 
-            StatusText.Text = "Playing…";
+            Update_StatusBar("Playing…");
         }
 
-        private void OpenFolder_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        void BtnFolder_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             WindowsExplorer_OpenAndSelect.OpenAndSelect(recordingPath);
         }
@@ -273,24 +267,22 @@ namespace Enregistreur_vocal
         {
             try
             {
-                //si buzz est ouvert, le fermer !
+                //si buzz est ouvert, le fermer ?!
 
 
+                FileWatchSRT(recordingPath);
 
-
-                string srtContent = await TranscrireAsync(recordingPath);
-
-                // Afficher le SRT dans un TextBox ou l’enregistrer ailleurs
-                _tbx_transcription.Text = srtContent;
+                await TranscrireAsync(recordingPath);
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                System.Windows.MessageBox.Show(ex.Message, "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        public async Task<string> TranscrireAsync(string mp3FilePath)
+        async Task TranscrireAsync(string mp3FilePath)
         {
+            Update_StatusBar("BuZZ Starting…");
             var args = $@"add --task transcribe --model-type whisper --model-size medium -l fr --srt ""{mp3FilePath}""";
 
             var startInfo = new ProcessStartInfo
@@ -313,11 +305,108 @@ namespace Enregistreur_vocal
 
             if (process.ExitCode != 0)
                 throw new Exception($"buzz a échoué ({process.ExitCode}): {stdErr}");
-
-            // Charger le fichier SRT produit
-            string srtPath = Path.ChangeExtension(mp3FilePath, ".srt");
-            return File.ReadAllText(srtPath);
         }
 
+        void Update_StatusBar(string message)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                StatusText.Text = message;
+                StatusText.ToolTip = message;
+            });
+        }
+
+        void FileWatchSRT(string filePath)
+        {
+            string folderToWatch = Path.GetDirectoryName(filePath);
+
+            watcher = new FileSystemWatcher(folderToWatch);
+            // On ne regarde pas les sous‑dossiers
+            watcher.IncludeSubdirectories = false;
+            // Seul le filtre sur l’extension .srt est activé
+            watcher.Filter = "*.srt";
+            // On s’abonne uniquement à l’événement Created (nouveau fichier)
+            watcher.Created += SRT_Created;
+            // Démarrage de la surveillance
+            watcher.EnableRaisingEvents = true;
+        }
+
+        void FileWatcher_STOP()
+        {
+            watcher.Created -= SRT_Created;
+            watcher.EnableRaisingEvents = false;
+            watcher.Dispose();
+            watcher = null;
+        }
+
+        void SRT_Created(object sender, FileSystemEventArgs e)
+        {
+            // On vérifie que le fichier est bien un .srt (juste au cas où)
+            if (Path.GetExtension(e.FullPath).Equals(".srt", StringComparison.OrdinalIgnoreCase))
+            {
+                FileWatcher_STOP();
+
+                Update_StatusBar("Transcription ended");
+                string srtContent = File.ReadAllText(e.FullPath);
+                // Afficher le SRT
+
+                Dispatcher.Invoke(() =>
+                {
+                    _tbx_transcription.Text = srtContent;
+                });
+
+                Send_to_LLM_ClickAsync(srtContent);
+            }
+        }
+
+        void Send_to_LLM_Click(object sender, RoutedEventArgs e)
+        {
+            string txt = _tbx_transcription.Text;
+            Send_to_LLM_ClickAsync(txt);
+        }
+
+        async Task Send_to_LLM_ClickAsync(string txt)
+        {
+            Update_StatusBar("Prompt sended to LLM…");
+            Dispatcher.Invoke(() => { _tbx_reponseLLM.Text = ""; });
+
+            string UserPrompt ="Peux tu me faire un résumé de la retranscription suivante :\n\n" + txt;
+            var client = new LMStudio_Client();
+            string reponse = await client.GetChatCompletionAsync(UserPrompt);
+
+            Dispatcher.Invoke(() => { _tbx_reponseLLM.Text = reponse; });            
+        }
+
+        private void Debug_PickWave_Click(object sender, RoutedEventArgs e)
+        {
+            Microsoft.Win32.OpenFileDialog ofd = new Microsoft.Win32.OpenFileDialog();
+            ofd.Filter = "Audio File|*.wav;*.mp3";
+            if (ofd.ShowDialog() != true) return;
+            recordingPath = ofd.FileName;
+            StartBuzz();
+        }
+
+        void TextBox_PreviewDragOver(object sender, System.Windows.DragEventArgs e)
+        {
+            // Vérifier si l'élément glissé contient des fichiers
+            if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop))            
+                e.Effects = System.Windows.DragDropEffects.Copy;            
+            else            
+                e.Effects = System.Windows.DragDropEffects.None;          
+            e.Handled = true;
+        }
+
+        void TextBox_Drop(object sender, System.Windows.DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop))
+            {
+                string[] files = (string[])e.Data.GetData(System.Windows.DataFormats.FileDrop);
+                if (files.Length > 0)
+                {
+                    string filePath = files[0];
+                    _tbx_transcription.Text = File.ReadAllText(filePath);
+                }
+            }
+        }
     }
 }
