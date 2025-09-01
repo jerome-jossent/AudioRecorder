@@ -1,0 +1,55 @@
+﻿<Window x:Class="Enregistreur_vocal.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Enregistreur_vocal"
+        mc:Ignorable="d"
+        Title="Audio recorder" Height="390" Width="300" Icon="/Images/microphone.png">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="auto"/>
+            <RowDefinition Height="auto"/>
+            <RowDefinition Height="auto"/>
+            <RowDefinition Height="auto"/>
+            <RowDefinition Height="auto"/>
+            <RowDefinition Height="500"/>
+        </Grid.RowDefinitions>
+        <!-- Ajoutez ceci avant les boutons -->
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="auto"/>
+            </Grid.ColumnDefinitions>
+            <ComboBox x:Name="DeviceSelector" Height="25"/>
+            <Image Grid.Column="1" Margin="5,0" RenderOptions.BitmapScalingMode="Fant" Source="/Images/refresh.png" Width="30" MouseDown="BtnRefreshInput_MouseDown"/>
+        </Grid>
+
+        <!-- Enregistrement -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center">
+            <Image Margin="5" RenderOptions.BitmapScalingMode="Fant" Source="/Images/record.png" Width="30" MouseDown="BtnRecord_MouseDown"/>
+            <Image Margin="5" RenderOptions.BitmapScalingMode="Fant" Source="/Images/Stop.png" Width="30" MouseDown="BtnStopRec_Click"/>
+            <Image Margin="5" RenderOptions.BitmapScalingMode="Fant" Source="/Images/Lecture.png" Width="30" MouseDown="BtnPlay_Click"/>
+        </StackPanel>
+
+        <!-- Statut -->
+        <TextBlock Grid.Row="2" x:Name="StatusText" Text="Ready..." Margin="0,10,0,0" FontWeight="Bold" MouseDown="OpenFolder_Click"/>
+
+        <ProgressBar Grid.Row="3" x:Name="LevelBar"
+             Height="20" Minimum="0" Maximum="100"
+             Margin="0,10,0,0"/>
+
+        <Grid Grid.Row="4" >
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="auto"/>
+                <ColumnDefinition Width="auto"/>
+            </Grid.ColumnDefinitions>
+            <CheckBox Name="_ckb_Buzz" Content="Run BuZZ automatically or with this :" VerticalAlignment="Center"/>
+            <Image Grid.Column="1" Margin="5" RenderOptions.BitmapScalingMode="Fant" Source="/Images/Lecture.png" Width="30" MouseDown="BtnBuzz_Click"/>
+        </Grid>
+        <Border Grid.Row="5">
+            <TextBox x:Name="_tbx_transcription" VerticalScrollBarVisibility="Visible"/>
+        </Border>
+
+    </Grid>
+</Window>
