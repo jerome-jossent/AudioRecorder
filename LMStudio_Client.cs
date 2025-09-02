@@ -11,15 +11,12 @@ namespace Enregistreur_vocal
         private readonly HttpClient _client = new();
         private const string BaseUrl = "http://localhost:1234/v1";
 
-        public async Task<string> GetChatCompletionAsync(string prompt)
+        public async Task<string> GetChatCompletionAsync(string prompt, string model_dans_LLMStudio)
         {
             var requestBody = new
             {
-                model = "openai/gpt-oss-20b",// "gpt-4o-mini",          // ou ton modèle dans LMStudio
-                messages = new[]
-                {
-                new { role = "user", content = prompt }
-            },
+                model = model_dans_LLMStudio,
+                messages = new[] { new { role = "user", content = prompt } },
                 temperature = 0.8,
                 max_tokens = 5000
             };

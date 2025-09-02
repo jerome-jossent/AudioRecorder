@@ -1,40 +1,67 @@
-﻿using Microsoft.Win32;
-using NAudio.Dsp;
-using NAudio.Lame;
+﻿using NAudio.Lame;
 using NAudio.Wave;
-using System;
-using System.Diagnostics;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
-using System.Windows.Forms;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace Enregistreur_vocal
 {
-    public partial class MainWindow : Window
+    public partial class MainWindow : Window, INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler PropertyChanged;
+        void NotifyPropertyChanged([CallerMemberName] String propertyName = "")
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
         // Capture audio
         WaveInEvent waveIn;
         WaveFileWriter writer;
+
+        // Filtres audio
+        FiltreAudio lowPass = null;   // ~16 kHz
+        FiltreAudio highPass = null; // ~80 Hz
 
         // Lecture audio
         IWavePlayer waveOut;
         AudioFileReader audioReader;
 
-        // Chemin du fichier d’enregistrement
-        string recordingPath;
-
-        // filtres 
-        FiltreAudio lowPass = null;   // ~16 kHz
-        FiltreAudio highPass = null; // ~80 Hz
+        // filewatcher pour la production du fichier SRT de la transcription par BuZZ
         FileSystemWatcher watcher;
+
+        #region BINDING
+        // Chemin du fichier d’enregistrement
+        public string recordingPath
+        {
+            get => _recordingPath; set
+            {
+                if (_recordingPath == value) return;
+                _recordingPath = value;
+                NotifyPropertyChanged();
+            }
+        }
+        string _recordingPath;
+
+        public string LLM_Studio_Model
+        {
+            get => _LLM_Studio_Model; set
+            {
+                if (_LLM_Studio_Model == value) return;
+                _LLM_Studio_Model = value;
+                NotifyPropertyChanged();
+            }
+        }
+        string _LLM_Studio_Model = "openai/gpt-oss-20b";
+        #endregion
+
 
         public MainWindow()
         {
             InitializeComponent();
+            DataContext = this;
             PopulateDevices();
         }
 
@@ -106,37 +133,6 @@ namespace Enregistreur_vocal
 
             Dispatcher.Invoke(() => LevelBar.Value = percent);
         }
-        //void WaveIn_DataAvailable(object sender, WaveInEventArgs e)
-        //{
-        //    // Écriture dans le fichier
-        //    if (writer != null)
-        //        writer.Write(e.Buffer, 0, e.BytesRecorded);
-
-        //    // ----- Calcul de l’intensité -----
-        //    float sumSquares = 0;
-        //    int bytesPerSample = waveIn.WaveFormat.BitsPerSample / 8; // 2 pour 16 bits
-        //    for (int index = 0; index < e.BytesRecorded; index += bytesPerSample)
-        //    {
-        //        short sample = BitConverter.ToInt16(e.Buffer, index);
-
-        //        // Filtrage
-        //        if (highPass != null) sample = highPass.ProcessSample(sample);
-        //        if (lowPass != null) sample = lowPass.ProcessSample(sample);
-
-        //        // Remplacer le buffer filtré
-        //        Array.Copy(BitConverter.GetBytes(sample), 0, e.Buffer, index, bytesPerSample);
-
-        //        float normalized = sample / 32768f;          // [-1.0 , +1.0]
-        //        sumSquares += normalized * normalized;
-        //    }
-
-        //    float rms = (float)Math.Sqrt(sumSquares / (e.BytesRecorded / bytesPerSample));
-        //    float db = 20 * (float)Math.Log10(rms > 0 ? rms : 0.00001f); // décibels
-        //    int percent = (int)(Math.Max(0, Math.Min(100, ((db + 60) / 60) * 100)));
-
-        //    // Mettre à jour la ProgressBar sur le thread UI
-        //    Dispatcher.Invoke(() => LevelBar.Value = percent);
-        //}
 
 
         private void WaveIn_RecordingStopped(object sender, StoppedEventArgs e)
@@ -182,7 +178,7 @@ namespace Enregistreur_vocal
             }
         }
 
-        void BtnRefreshInput_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e){PopulateDevices();}
+        void BtnRefreshInput_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) { PopulateDevices(); }
 
         void PopulateDevices()
         {
@@ -355,26 +351,27 @@ namespace Enregistreur_vocal
                     _tbx_transcription.Text = srtContent;
                 });
 
-                Send_to_LLM_ClickAsync(srtContent);
+                Send_to_LLM_ClickAsync(srtContent, LLM_Studio_Model);
             }
         }
 
         void Send_to_LLM_Click(object sender, RoutedEventArgs e)
         {
             string txt = _tbx_transcription.Text;
-            Send_to_LLM_ClickAsync(txt);
+            Send_to_LLM_ClickAsync(txt, LLM_Studio_Model);
         }
 
-        async Task Send_to_LLM_ClickAsync(string txt)
+
+        async Task Send_to_LLM_ClickAsync(string txt, string llmStudio_Model)
         {
             Update_StatusBar("Prompt sended to LLM…");
             Dispatcher.Invoke(() => { _tbx_reponseLLM.Text = ""; });
 
-            string UserPrompt ="Peux tu me faire un résumé de la retranscription suivante :\n\n" + txt;
+            string UserPrompt = "Peux tu me faire un résumé de la retranscription suivante :\n\n" + txt;
             var client = new LMStudio_Client();
-            string reponse = await client.GetChatCompletionAsync(UserPrompt);
+            string reponse = await client.GetChatCompletionAsync(UserPrompt, LLM_Studio_Model);
 
-            Dispatcher.Invoke(() => { _tbx_reponseLLM.Text = reponse; });            
+            Dispatcher.Invoke(() => { _tbx_reponseLLM.Text = reponse; });
         }
 
         private void Debug_PickWave_Click(object sender, RoutedEventArgs e)
@@ -389,10 +386,10 @@ namespace Enregistreur_vocal
         void TextBox_PreviewDragOver(object sender, System.Windows.DragEventArgs e)
         {
             // Vérifier si l'élément glissé contient des fichiers
-            if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop))            
-                e.Effects = System.Windows.DragDropEffects.Copy;            
-            else            
-                e.Effects = System.Windows.DragDropEffects.None;          
+            if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop))
+                e.Effects = System.Windows.DragDropEffects.Copy;
+            else
+                e.Effects = System.Windows.DragDropEffects.None;
             e.Handled = true;
         }
 
