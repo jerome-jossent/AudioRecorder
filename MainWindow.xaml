@@ -45,6 +45,7 @@
                     <CheckBox Name="_ckb_Buzz" Content="Run BuZZ automatically or with this :" VerticalAlignment="Center"/>
                     <Image Grid.Column="1" Margin="5" RenderOptions.BitmapScalingMode="Fant" Source="/Images/Lecture.png" Width="30" MouseDown="BtnBuzz_Click"/>
                 </Grid>
+                        <Button Margin="0,5" Content="DEBUG Pick Wave" Click="Debug_PickWave_Click"/>
             </StackPanel>
 
             <Border Grid.Row="1">
@@ -58,7 +59,6 @@
                              AllowDrop="True" PreviewDragOver="TextBox_PreviewDragOver" Drop="TextBox_Drop"/>
                     <StackPanel Grid.Row="1" Orientation="Vertical">
                         <Button Margin="0,5" Content="Send to LLM" Click="Send_to_LLM_Click"/>
-                        <Button Margin="0,5" Content="DEBUG Pick Wave" Click="Debug_PickWave_Click"/>
                     </StackPanel>
 
                     <TextBox Grid.Row="2" x:Name="_tbx_reponseLLM" VerticalScrollBarVisibility="Visible" AcceptsReturn="True"/>

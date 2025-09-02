@@ -370,8 +370,14 @@ namespace Enregistreur_vocal
             string UserPrompt = "Peux tu me faire un résumé de la retranscription suivante :\n\n" + txt;
             var client = new LMStudio_Client();
             string reponse = await client.GetChatCompletionAsync(UserPrompt, LLM_Studio_Model);
-
+            SaveReponse(reponse);
             Dispatcher.Invoke(() => { _tbx_reponseLLM.Text = reponse; });
+        }
+
+        void SaveReponse(string reponse)
+        {
+            string path = Path.ChangeExtension(recordingPath, ".resume.txt"); ;
+            File.WriteAllText( path, reponse);            
         }
 
         private void Debug_PickWave_Click(object sender, RoutedEventArgs e)
