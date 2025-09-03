@@ -1,7 +1,7 @@
 ﻿using System.Diagnostics;
 using System.IO;
 
-namespace Enregistreur_vocal
+namespace JJO_Tools// Enregistreur_vocal
 {
     public class WindowsExplorer_OpenAndSelect
     {
