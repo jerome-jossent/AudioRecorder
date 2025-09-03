@@ -107,19 +107,13 @@ namespace Enregistreur_vocal
 
         Dictionary<TypePrompt, string> prompts;
 
-        void LLM_prompts_init()
-        {
-            prompts = new Dictionary<TypePrompt, string>();
-            prompts.Add(TypePrompt.demande, "Utilise la retranscription suivante comme une demande :");
-            prompts.Add(TypePrompt.resume, "Peux tu me faire un résumé de la retranscription suivante :");
-        }
-
         public MainWindow()
         {
             InitializeComponent();
             DataContext = this;
         }
 
+        #region IHM
         void IHM_Loaded(object sender, RoutedEventArgs e)
         {
             Audio_PopulateDevices();
@@ -131,7 +125,47 @@ namespace Enregistreur_vocal
             Audio_ListeningSTOP();
         }
 
-        /* ---------- Capture audio ---------- */
+        void IHM_Update_StatusBar(string message)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                StatusText.Text = message;
+                StatusText.ToolTip = message;
+            });
+        }
+        
+        void RecordingPath(string fileName = null)
+        {
+            if (fileName == null)
+            {
+                recordingPath = Path.Combine(recordingFolder, "Vocal " + DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss"));
+            }
+            else
+            {
+                FileInfo fileInfo = new FileInfo(fileName);
+                //remove extension
+                string ext = fileInfo.Extension;
+                recordingPath = fileInfo.FullName.Replace(ext, "");
+            }
+        }
+              
+        void BtnFolder_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            string file = recordingPath + extensions[FileType.audioWAV];
+            if (!File.Exists(file))
+                file = recordingPath + extensions[FileType.audioMP3];
+
+            JJO_Tools.WindowsExplorer_OpenAndSelect.OpenAndSelect(file);
+        }
+
+        void BtnBuzz_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            Transcription_StartBuzz();
+        }
+
+        #endregion
+
+        #region AUDIO
         void BtnRefreshInput_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) { Audio_PopulateDevices(); }
 
         void Audio_PopulateDevices()
@@ -152,7 +186,7 @@ namespace Enregistreur_vocal
                 DeviceSelector.SelectedIndex = 0;  //déclenche DeviceSelector_SelectionChanged()           
         }
 
-        void DeviceSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        void Audio_DeviceSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             Audio_ListeningSTOP();
             Audio_InitCapture();
@@ -245,9 +279,9 @@ namespace Enregistreur_vocal
             waveIn = null;
         }
 
-        void OnNewWav()
+        void Audio_OnNewWav()
         {
-            Update_StatusBar($"Converting WAV to MP3…");
+            IHM_Update_StatusBar($"Converting WAV to MP3…");
             lock (access_to_audioWAVfile)
             {
                 writer?.Dispose();
@@ -255,10 +289,10 @@ namespace Enregistreur_vocal
             }
             Audio_ConvertWaveToMP3();
             File.Delete(recordingPath + extensions[FileType.audioWAV]);
-            Update_StatusBar($"Record completed – {recordingPath}");
+            IHM_Update_StatusBar($"Record completed – {recordingPath}");
 
             if (_ckb_Buzz.IsChecked == true)
-                StartBuzz();
+                Transcription_StartBuzz();
         }
 
         void Audio_ConvertWaveToMP3()
@@ -282,9 +316,6 @@ namespace Enregistreur_vocal
             }
         }
 
-
-
-        /* ---------- Create Audio ---------- */
         void BtnRecord_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             audio_recording = true;
@@ -295,39 +326,35 @@ namespace Enregistreur_vocal
         {
             audio_recording = false;
             Update_AudioINState();
-            OnNewWav();
+            Audio_OnNewWav();
         }
-
 
         void Update_AudioINState()
         {
-            Update_StatusBar(audio_recording ? "Recording…" : "Listening…");
+            IHM_Update_StatusBar(audio_recording ? "Recording…" : "Listening…");
         }
-
-        void BtnFolder_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+  
+        void Debug_PickWave_Click(object sender, RoutedEventArgs e)
         {
-            string file = recordingPath + extensions[FileType.audioWAV];
-            if (!File.Exists(file))
-                file = recordingPath + extensions[FileType.audioMP3];
-
-            JJO_Tools.WindowsExplorer_OpenAndSelect.OpenAndSelect(file);
+            Microsoft.Win32.OpenFileDialog ofd = new Microsoft.Win32.OpenFileDialog();
+            ofd.Filter = "Audio File|*.wav;*.mp3";
+            if (ofd.ShowDialog() != true) return;
+            RecordingPath(ofd.FileName);
+            Transcription_StartBuzz();
         }
+        #endregion
 
-        void BtnBuzz_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            StartBuzz();
-        }
-
-        async void StartBuzz()
+        #region TRANSCRIPTION
+        async void Transcription_StartBuzz()
         {
             try
             {
                 //si buzz est ouvert, le fermer ?!
 
 
-                FileWatchSRT(recordingPath);
+                Transcription_FileWatchSRT(recordingPath);
 
-                await TranscrireAsync(recordingPath + extensions[FileType.audioMP3]);
+                await Transcription_StartBuzzAsync(recordingPath + extensions[FileType.audioMP3]);
             }
             catch (Exception ex)
             {
@@ -335,9 +362,9 @@ namespace Enregistreur_vocal
             }
         }
 
-        async Task TranscrireAsync(string filePath)
+        async Task Transcription_StartBuzzAsync(string filePath)
         {
-            Update_StatusBar("BuZZ Starting…");
+            IHM_Update_StatusBar("BuZZ Starting…");
             var args = $@"add --task transcribe --model-type whisper --model-size medium -l fr --srt ""{filePath}""";
 
             var startInfo = new ProcessStartInfo
@@ -362,16 +389,7 @@ namespace Enregistreur_vocal
                 throw new Exception($"buzz a échoué ({process.ExitCode}): {stdErr}");
         }
 
-        void Update_StatusBar(string message)
-        {
-            Dispatcher.Invoke(() =>
-            {
-                StatusText.Text = message;
-                StatusText.ToolTip = message;
-            });
-        }
-
-        void FileWatchSRT(string filePath)
+        void Transcription_FileWatchSRT(string filePath)
         {
             string folderToWatch = Path.GetDirectoryName(filePath);
 
@@ -381,27 +399,27 @@ namespace Enregistreur_vocal
             // Seul le filtre sur l’extension .srt est activé
             transcription_watcher.Filter = "*.srt";
             // On s’abonne uniquement à l’événement Created (nouveau fichier)
-            transcription_watcher.Created += SRT_Created;
+            transcription_watcher.Created += Transcription_SRT_Created;
             // Démarrage de la surveillance
             transcription_watcher.EnableRaisingEvents = true;
         }
 
-        void FileWatcher_STOP()
+        void Transcription_FileWatcher_STOP()
         {
-            transcription_watcher.Created -= SRT_Created;
+            transcription_watcher.Created -= Transcription_SRT_Created;
             transcription_watcher.EnableRaisingEvents = false;
             transcription_watcher.Dispose();
             transcription_watcher = null;
         }
 
-        void SRT_Created(object sender, FileSystemEventArgs e)
+        void Transcription_SRT_Created(object sender, FileSystemEventArgs e)
         {
             // On vérifie que le fichier est bien un .srt (juste au cas où)
             if (Path.GetExtension(e.FullPath).Equals(".srt", StringComparison.OrdinalIgnoreCase))
             {
-                FileWatcher_STOP();
+                Transcription_FileWatcher_STOP();
 
-                Update_StatusBar("Transcription ended");
+                IHM_Update_StatusBar("Transcription ended");
                 string srtContent = File.ReadAllText(e.FullPath);
 
                 // Afficher le SRT
@@ -411,88 +429,7 @@ namespace Enregistreur_vocal
             }
         }
 
-        void LLM_Send_Manually(object sender, RoutedEventArgs e)
-        {
-            string txt = _tbx_transcription.Text;
-            LLM_AskAndGetResponse(txt, LLM_Studio_Model);
-        }
-
-        async Task LLM_AskAndGetResponse(string txt, string llmStudio_Model)
-        {
-            Update_StatusBar("Prompt sended to LLM…");
-            LLM_WriteResponseToHMI("");
-
-            string UserPrompt = prompts[llm_typePrompt] + "\n\n" + txt;
-
-            var client = new LMStudio_Client();
-            string reponse = await client.GetChatCompletionAsync(UserPrompt, LLM_Studio_Model);
-
-            LLM_WriteResponseToHMI(reponse);
-            LLM_SaveReponse(reponse, ".resume");
-        }
-
-        void LLM_WriteResponseToHMI(string response)
-        {
-            // 1. Créez un FlowDocument vide (ou récupérez-en un existant)
-            FlowDocument doc = new FlowDocument();
-
-            // 2. Ajoutez un paragraphe avec du texte brut
-            Paragraph p1 = new Paragraph(new Run(response));
-            doc.Blocks.Add(p1);
-
-            //// 3. Ajoutez un paragraphe formaté (gras, couleur)
-            //Run formattedRun = new Run("Texte en gras et rouge.")
-            //{
-            //    FontWeight = FontWeights.Bold,
-            //    Foreground = Brushes.Red
-            //};
-            //Paragraph p2 = new Paragraph(formattedRun);
-            //doc.Blocks.Add(p2);
-
-            //// 4. Ajoutez un paragraphe avec une liste
-            //List list = new List();
-            //list.ListItems.Add(new ListItem(new Paragraph(new Run("Élément 1"))));
-            //list.ListItems.Add(new ListItem(new Paragraph(new Run("Élément 2"))));
-            //doc.Blocks.Add(list);
-
-            // 5. Affectez le FlowDocument au RichTextBox
-
-            Dispatcher.Invoke(() => { _tbx_reponseLLM.Document = doc; });
-
-        }
-
-        void LLM_SaveReponse(string reponse, string suffixe = "")
-        {
-            RecordingPath();
-            string path = recordingPath + suffixe + extensions[FileType.resultTXT]; ;
-            File.WriteAllText(path, reponse);
-        }
-
-        void RecordingPath(string fileName = null)
-        {
-            if (fileName == null)
-            {
-                recordingPath = Path.Combine(recordingFolder, "Vocal " + DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss"));
-            }
-            else
-            {
-                FileInfo fileInfo = new FileInfo(fileName);
-                //remove extension
-                string ext = fileInfo.Extension;
-                recordingPath = fileInfo.FullName.Replace(ext, "");
-            }
-        }
-
-        private void Debug_PickWave_Click(object sender, RoutedEventArgs e)
-        {
-            Microsoft.Win32.OpenFileDialog ofd = new Microsoft.Win32.OpenFileDialog();
-            ofd.Filter = "Audio File|*.wav;*.mp3";
-            if (ofd.ShowDialog() != true) return;
-            RecordingPath(ofd.FileName);
-            StartBuzz();
-        }
-
-        void TextBox_PreviewDragOver(object sender, System.Windows.DragEventArgs e)
+        void Transcription_TextBox_PreviewDragOver(object sender, System.Windows.DragEventArgs e)
         {
             // Vérifier si l'élément glissé contient des fichiers
             if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop))
@@ -502,7 +439,7 @@ namespace Enregistreur_vocal
             e.Handled = true;
         }
 
-        void TextBox_Drop(object sender, System.Windows.DragEventArgs e)
+        void Transcription_TextBox_Drop(object sender, System.Windows.DragEventArgs e)
         {
             if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop))
             {
@@ -514,6 +451,44 @@ namespace Enregistreur_vocal
                 }
             }
         }
+        #endregion
 
+        #region LLM
+        void LLM_prompts_init()
+        {
+            prompts = new Dictionary<TypePrompt, string>();
+            prompts.Add(TypePrompt.demande, "Utilise la retranscription suivante comme une demande :");
+            prompts.Add(TypePrompt.resume, "Peux tu me faire un résumé de la retranscription suivante :");
+        }
+
+        void LLM_Send_Manually(object sender, RoutedEventArgs e)
+        {
+            string txt = _tbx_transcription.Text;
+            LLM_AskAndGetResponse(txt, LLM_Studio_Model);
+        }
+
+        async Task LLM_AskAndGetResponse(string txt, string llmStudio_Model)
+        {
+            IHM_Update_StatusBar("Prompt sended to LLM…");
+            Dispatcher.Invoke(() => { _tbx_reponseLLM.Text = ""; });
+
+            string UserPrompt = prompts[llm_typePrompt] + "\n\n" + txt;
+
+            var client = new LMStudio_Client();
+            string reponse = await client.GetChatCompletionAsync(UserPrompt, LLM_Studio_Model);
+
+            Dispatcher.Invoke(() => { _tbx_reponseLLM.Text = reponse; });
+
+            LLM_SaveReponse(reponse, ".resume");
+        }
+
+        void LLM_SaveReponse(string reponse, string suffixe = "")
+        {
+            RecordingPath();
+            string path = recordingPath + suffixe + extensions[FileType.resultTXT]; ;
+            File.WriteAllText(path, reponse);
+        }
+
+        #endregion
     }
 }

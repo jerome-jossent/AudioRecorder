@@ -2,14 +2,12 @@
 using System.Text;
 using System.Text.Json;
 
-
 namespace Enregistreur_vocal
 {
     internal class LMStudio_Client
     {
-
-        private readonly HttpClient _client = new();
-        private const string BaseUrl = "http://localhost:1234/v1";
+        readonly HttpClient _client = new();
+        const string BaseUrl = "http://localhost:1234/v1";
 
         public async Task<string> GetChatCompletionAsync(string prompt, string model_dans_LLMStudio)
         {

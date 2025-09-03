@@ -1,11 +1,10 @@
 ﻿using System.Diagnostics;
 using System.IO;
 
-namespace JJO_Tools// Enregistreur_vocal
+namespace JJO_Tools
 {
     public class WindowsExplorer_OpenAndSelect
     {
-
         internal static void OpenAndSelect(FileInfo file)
         {
             OpenAndSelect(file.FullName);
@@ -15,7 +14,6 @@ namespace JJO_Tools// Enregistreur_vocal
         {
             if (!File.Exists(path)) return;
 
-            // commande Explorer /select,"<chemin>"
             string explorerCommand = $"explorer.exe";
             string arguments = $"/select,\"{path}\"";
 
@@ -26,15 +24,13 @@ namespace JJO_Tools// Enregistreur_vocal
                 {
                     FileName = explorerCommand,
                     Arguments = arguments,
-                    UseShellExecute = true   // important sous .NET Core/5+/6+
+                    UseShellExecute = true
                 });
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"❌ Erreur lors de l’ouverture d’Explorer : {ex.Message}");
             }
-
         }
-
     }
 }
